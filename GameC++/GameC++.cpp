@@ -1,4 +1,4 @@
-﻿#include <SFML/Graphics.hpp>
+#include <SFML/Graphics.hpp>
 #include <ctime>
 #include <cstdlib>
 
@@ -42,8 +42,32 @@ bool check() {
     return true;
 }
 
-//stat 
+// Trạng thái trò chơi
 bool isplaying = false;
+bool isWaiting = true; // Biến trạng thái màn hình chờ
+
+// Hàm reset game
+void resetGame() {
+    // Xóa bảng chơi (đặt tất cả về 0)
+    for (int i = 0; i < M; i++) {
+        for (int j = 0; j < N; j++) {
+            field[i][j] = 0;
+        }
+    }
+
+    // Đặt lại biến điều khiển
+    isplaying = true;  // Bắt đầu lại trò chơi
+    srand(static_cast<unsigned>(time(0)));
+    float timer = 0, delay = 0.3;
+
+    // Sinh ra mảnh mới ngẫu nhiên
+    int currentPiece = rand() % 7;
+    int n = currentPiece;
+    for (int i = 0; i < 4; i++) {
+        a[i].x = figures[n][i] % 2;
+        a[i].y = figures[n][i] / 2;
+    }
+}
 
 int main() {
     srand(static_cast<unsigned>(time(0)));
@@ -58,7 +82,7 @@ int main() {
 
     int dx = 0;
     bool rotate = false;
-    int currentPiece = 0;
+    int currentPiece = rand() % 7;
     float timer = 0, delay = 0.3;
 
     Clock clock;
@@ -82,21 +106,27 @@ int main() {
         while (window.pollEvent(e)) {
             if (e.type == Event::Closed)
                 window.close();
-            if (e.type == Event::KeyPressed && isplaying == true)
-                if (e.key.code == Keyboard::Up) rotate = true;
-                else if (e.key.code == Keyboard::Left) dx = -1;
-                else if (e.key.code == Keyboard::Right) dx = 1;
+            if (e.type == Event::KeyPressed) {
+                if (isWaiting && e.key.code == Keyboard::Enter) {
+                    isWaiting = false;  // Thoát màn hình chờ, bắt đầu chơi
+                    resetGame();  // Reset trò chơi khi bắt đầu
+                }
+                else if (isplaying == true) {
+                    if (e.key.code == Keyboard::Up) rotate = true;
+                    else if (e.key.code == Keyboard::Left) dx = -1;
+                    else if (e.key.code == Keyboard::Right) dx = 1;
+                }
+            }
         }
 
-        if (isplaying == false && Keyboard::isKeyPressed(Keyboard::Enter))
-        {
-            isplaying = true;
+        if (isplaying == false && Keyboard::isKeyPressed(Keyboard::Enter)) {
+            resetGame();  // Reset lại trò chơi
         }
 
         if (isplaying) {
             if (Keyboard::isKeyPressed(Keyboard::Down)) delay = 0.05;
 
-            // Move
+            // Di chuyển theo chiều ngang
             for (int i = 0; i < 4; i++) {
                 b[i] = a[i];
                 a[i].x += dx;
@@ -105,9 +135,9 @@ int main() {
                 for (int i = 0; i < 4; i++) a[i] = b[i];
             }
 
-            // Rotate
+            // Xoay mảnh
             if (rotate) {
-                Point p = a[1]; // Center of rotation
+                Point p = a[1]; // Tâm xoay
                 for (int i = 0; i < 4; i++) {
                     int x = a[i].y - p.y;
                     int y = a[i].x - p.x;
@@ -119,7 +149,7 @@ int main() {
                 }
             }
 
-            // Tick
+            // Tăng mảnh xuống dần theo thời gian
             if (timer > delay) {
                 for (int i = 0; i < 4; i++) {
                     b[i] = a[i];
@@ -131,18 +161,24 @@ int main() {
                         field[b[i].y][b[i].x] = pieceColors[currentPiece];
                     }
 
+                    // Sinh mảnh mới ngẫu nhiên
                     currentPiece = rand() % 7;
                     int n = currentPiece;
                     for (int i = 0; i < 4; i++) {
                         a[i].x = figures[n][i] % 2;
                         a[i].y = figures[n][i] / 2;
                     }
+
+                    // Kiểm tra va chạm ngay khi tạo mảnh mới
+                    if (!check()) {
+                        isplaying = false;  // Kết thúc trò chơi nếu va chạm ngay lập tức
+                    }
                 }
 
                 timer = 0;
             }
 
-            // Check lines
+            // Kiểm tra và loại bỏ dòng đã đầy
             int k = M - 1;
             for (int i = M - 1; i >= 0; i--) {
                 int count = 0;
@@ -154,13 +190,25 @@ int main() {
             }
             dx = 0; rotate = 0; delay = 0.3;
         }
-        if (isplaying)
-        {
-            // Draw
-            window.clear(Color::White);
-            window.draw(background);
 
-            // Draw field
+        window.clear(Color::White);
+        window.draw(background);
+
+        if (isWaiting) {
+            // Hiển thị màn hình chờ
+            Font font;
+            if (font.loadFromFile("../data/MCR.ttf")) {  // Tải font từ tệp
+                Text waitingText;
+                waitingText.setFont(font);
+                waitingText.setString("Press Enter to Start");
+                waitingText.setCharacterSize(50);
+                waitingText.setFillColor(Color::Blue);
+                waitingText.setPosition(window.getSize().x / 2 - 200, window.getSize().y / 2 - 50);
+                window.draw(waitingText);
+            }
+        }
+        else {
+            // Vẽ các khối trên bảng
             for (int i = 0; i < M; i++) {
                 for (int j = 0; j < N; j++) {
                     if (field[i][j] == 0) continue;
@@ -170,14 +218,27 @@ int main() {
                 }
             }
 
-            // Draw current piece
+            // Vẽ mảnh hiện tại
             for (int i = 0; i < 4; i++) {
                 s.setTextureRect(IntRect(pieceColors[currentPiece] * BlockSize, 0, BlockSize, BlockSize));
                 s.setPosition(a[i].x * BlockSize + offsetX, a[i].y * BlockSize + offsetY);
                 window.draw(s);
             }
+
+            // Hiển thị thông báo "Game Over" nếu trò chơi kết thúc
+            if (!isplaying) {
+                Font font;
+                if (font.loadFromFile("../data/MCR.ttf")) {  // Tải font từ tệp
+                    Text gameOverText;
+                    gameOverText.setFont(font);
+                    gameOverText.setString("Game Over! Press Enter to Restart");
+                    gameOverText.setCharacterSize(40);
+                    gameOverText.setFillColor(Color::Red);
+                    gameOverText.setPosition(window.getSize().x / 2 - 200, window.getSize().y / 2 - 50);
+                    window.draw(gameOverText);
+                }
+            }
         }
-        
 
         window.display();
     }
