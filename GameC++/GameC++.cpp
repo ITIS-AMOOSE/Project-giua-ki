@@ -3,10 +3,8 @@
 #include <cstdlib>
 #include <string>
 #include <sstream>
-#include <iostream>
 
 using namespace sf;
-using namespace std;
 
 const int M = 23;
 const int N = 10;
@@ -47,10 +45,9 @@ bool check() {
     return true;
 }
 
-
+// Trạng thái trò chơi
 // Trạng thái trò chơi
 bool isplaying = false;
-bool isGameOver = false; // Trạng thái game over
 bool isPaused = false;   // Biến trạng thái tạm dừng
 bool isWaiting = true;   // Biến trạng thái màn hình chờ
 bool countdownActive = true; // Biến trạng thái đếm ngược
@@ -60,18 +57,10 @@ bool isHolding = false; // Biến trạng thái hold
 int holdPiece = -1; // Khối đã được hold (mặc định là -1 nghĩa là chưa hold)
 bool canHold = true;
 int currentPiece, nextPiece; // Mảnh hiện tại và tiếp theo
-float scoreThreshold = 300;  // Ngưỡng điểm ban đầu
-float minDelay = 0.05;       // Tốc độ rơi nhanh nhất có thể
-bool isFastDropping = false;  // Thêm một biến để chỉ định chế độ rơi nhanh
-bool isDelayActive = false; // Biến để kiểm tra trạng thái delay
-Clock delayClock; // Đồng hồ để theo dõi thời gian delay
-const float delayDuration = 1.0f; // Thời gian delay 1 giây
-
 
 
 // Hàm reset game
 void resetGame() {
-
     // Xóa bảng chơi (đặt tất cả về 0)
     for (int i = 0; i < M; i++) {
         for (int j = 0; j < N; j++) {
@@ -171,8 +160,8 @@ int main() {
                     resetGame();        // Reset trò chơi khi game over
                     isWaiting = false;  // Bắt đầu trò chơi ngay
                 }
-                else if(!isplaying && e.key.code == Keyboard::Escape){
-                        window.close();  // Thoát trò chơi
+                else if (!isplaying && e.key.code == Keyboard::Escape) {
+                    window.close();  // Thoát trò chơi
                 }
 
                 if (!isPaused && isplaying) {
@@ -230,57 +219,8 @@ int main() {
         }
 
         if (!isPaused && isplaying && !countdownActive) {
-            // Cập nhật thời gian delta
-            float deltaTime = clock.restart().asSeconds();
-            timer += deltaTime;
+            if (Keyboard::isKeyPressed(Keyboard::Down)) delay = 0.05;
 
-            // Di chuyển các khối theo thời gian delta để mượt mà hơn
-            float moveSpeed = 0.3; // Tốc độ di chuyển khối xuống (có thể điều chỉnh)
-            for (int i = 0; i < 4; i++) {
-                b[i] = a[i];
-                a[i].y += moveSpeed * deltaTime; // Di chuyển khối dựa trên deltaTime
-            }
-
-            float deltaTime = clock.restart().asSeconds();
-            timer += deltaTime;
-
-            // Kiểm tra thời gian delay
-            if (isDelayActive) {
-                if (delayClock.getElapsedTime().asSeconds() >= delayDuration) {
-                    isDelayActive = false; // Kết thúc delay
-                }
-            }
-
-            if (Keyboard::isKeyPressed(Keyboard::Down) && !isDelayActive) {
-                // Di chuyển khối xuống nhanh hơn khi nhấn Down
-                for (int i = 0; i < 4; i++) {
-                    b[i] = a[i];
-                    a[i].y += 1; // Di chuyển khối xuống nhanh hơn khi nhấn Down
-                }
-
-                // Kiểm tra va chạm
-                if (!check()) {
-                    for (int i = 0; i < 4; i++) a[i] = b[i]; // Nếu có va chạm, hủy thao tác
-
-                    // Thiết lập trạng thái delay
-                    isDelayActive = true;
-                    delayClock.restart(); // Khởi động đồng hồ delay
-                }
-            }
-
-            // Kiểm tra xem điểm có vượt qua ngưỡng hiện tại không
-            if (score >= scoreThreshold) {
-                // Giảm delay đi theo giá trị nhỏ hơn để mượt hơn
-                delay *= 0.9;  // Tốc độ tăng 10% mỗi lần đạt ngưỡng điểm
-
-                // Cập nhật ngưỡng điểm tiếp theo (thêm 300 điểm vào ngưỡng hiện tại)
-                scoreThreshold += 300;
-
-                // Đảm bảo delay không giảm quá mức giới hạn tối thiểu
-                if (delay < minDelay) {
-                    delay = minDelay;  // Giữ delay ở mức tối thiểu đã định
-                }
-            }
             // Di chuyển theo chiều ngang
             for (int i = 0; i < 4; i++) {
                 b[i] = a[i];
@@ -308,15 +248,17 @@ int main() {
             if (timer > delay) {
                 for (int i = 0; i < 4; i++) {
                     b[i] = a[i];
-                    a[i].y += 1; // Di chuyển khối xuống
+                    a[i].y += 1;
                 }
 
                 if (!check()) {
-                    for (int i = 0; i < 4; i++) field[b[i].y][b[i].x] = pieceColors[currentPiece];
+                    for (int i = 0; i < 4; i++) {
+                        field[b[i].y][b[i].x] = pieceColors[currentPiece];
+                    }
 
-                    // Sinh mảnh mới
+                    // Sinh mảnh mới ngẫu nhiên
                     currentPiece = nextPiece;
-                    nextPiece = rand() % 7;
+                    nextPiece = rand() % 7; // Cập nhật mảnh tiếp theo
 
                     int n = currentPiece;
                     for (int i = 0; i < 4; i++) {
@@ -324,12 +266,12 @@ int main() {
                         a[i].y = figures[n][i] / 2;
                     }
 
-                    // Reset trạng thái hold
-                    canHold = true;
+                    // Reset lại trạng thái hold
+                    canHold = true; // Cho phép hold khi khối mới được sinh ra
 
+                    // Kiểm tra va chạm ngay khi tạo mảnh mới
                     if (!check()) {
-                        isplaying = false;
-                        isGameOver = true; 
+                        isplaying = false;  // Kết thúc trò chơi nếu va chạm ngay lập tức
                     }
                 }
 
@@ -392,9 +334,9 @@ int main() {
 
                 Text title("PAUSE", font, 100);
                 title.setFillColor(Color::White);
-                title.setPosition(140, 150);
+                title.setPosition(170, 150);
 
-                Text instruction("  Press ENTER to Resume\n\nPress R to Restart", font, 35);
+                Text instruction("  Press ENTER to Resume\n\n  Press R to Restart", font, 35);
                 instruction.setFillColor(Color::White);
                 instruction.setPosition(90, 400);
 
@@ -402,20 +344,19 @@ int main() {
                 window.draw(instruction);
             }
         }
-        else if (isGameOver) {
-            // Vẽ lớp phủ bán trong suốt
-            RectangleShape overlay(Vector2f(window.getSize().x, window.getSize().y));
-            overlay.setFillColor(Color(0, 0, 0, 150));  // Màu đen, độ trong suốt 150
-            window.draw(overlay);
+        else if (!isplaying) {
+            window.clear(Color::Black);
 
-            // Hiển thị thông báo "Game Over"
-            Text gameOverText;
-            gameOverText.setFont(font);
-            gameOverText.setString("                 Game Over\nPress Enter to Restart\nPress ESC to Exit");
-            gameOverText.setCharacterSize(50);
-            gameOverText.setFillColor(Color::Red);
-            gameOverText.setPosition(window.getSize().x / 2 - 295, window.getSize().y / 2 - 50);
-            window.draw(gameOverText);
+            Text title("GAME OVER", font, 100);
+            title.setFillColor(Color::Red);
+            title.setPosition(60, 150);
+
+            Text instruction("  Press Enter to Restart\n\n  Press ESC to Exit", font, 35);
+            instruction.setFillColor(Color::Red);
+            instruction.setPosition(90, 400);
+
+            window.draw(title);
+            window.draw(instruction);
         }
         else {
             // Vẽ các khối
