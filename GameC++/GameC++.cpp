@@ -3,8 +3,10 @@
 #include <cstdlib>
 #include <string>
 #include <sstream>
+#include <iostream>
 
 using namespace sf;
+using namespace std;
 
 const int M = 23;
 const int N = 10;
@@ -45,8 +47,10 @@ bool check() {
     return true;
 }
 
+
 // Trạng thái trò chơi
 bool isplaying = false;
+bool isGameOver = false; // Trạng thái game over
 bool isPaused = false;   // Biến trạng thái tạm dừng
 bool isWaiting = true;   // Biến trạng thái màn hình chờ
 bool countdownActive = true; // Biến trạng thái đếm ngược
@@ -56,9 +60,18 @@ bool isHolding = false; // Biến trạng thái hold
 int holdPiece = -1; // Khối đã được hold (mặc định là -1 nghĩa là chưa hold)
 bool canHold = true;
 int currentPiece, nextPiece; // Mảnh hiện tại và tiếp theo
+float scoreThreshold = 300;  // Ngưỡng điểm ban đầu
+float minDelay = 0.05;       // Tốc độ rơi nhanh nhất có thể
+bool isFastDropping = false;  // Thêm một biến để chỉ định chế độ rơi nhanh
+bool isDelayActive = false; // Biến để kiểm tra trạng thái delay
+Clock delayClock; // Đồng hồ để theo dõi thời gian delay
+const float delayDuration = 1.0f; // Thời gian delay 1 giây
+
+
 
 // Hàm reset game
 void resetGame() {
+
     // Xóa bảng chơi (đặt tất cả về 0)
     for (int i = 0; i < M; i++) {
         for (int j = 0; j < N; j++) {
@@ -82,6 +95,7 @@ void resetGame() {
     }
     canHold = true;
     isHolding = false; // Đánh dấu chưa hold
+    holdPiece = -1;
 }
 
 int main() {
@@ -127,6 +141,14 @@ int main() {
             if (e.type == Event::Closed)
                 window.close();
 
+            if (e.key.code == Keyboard::R && isPaused) {
+                resetGame();        // Reset lại trò chơi
+                isPaused = false;   // Bỏ trạng thái tạm dừng
+                countdownActive = true; // Bắt đầu đếm ngược
+                countdownTime = 3.0f;   // Đặt lại thời gian đếm ngược
+                countdownClock.restart(); // Khởi động đồng hồ đếm ngược
+            }
+
             if (e.type == Event::KeyPressed) {
                 if (e.key.code == Keyboard::Escape && isplaying) {
                     isPaused = !isPaused;  // Đảo ngược trạng thái tạm dừng
@@ -148,6 +170,9 @@ int main() {
                 else if (!isplaying && e.key.code == Keyboard::Enter) {
                     resetGame();        // Reset trò chơi khi game over
                     isWaiting = false;  // Bắt đầu trò chơi ngay
+                }
+                else if(!isplaying && e.key.code == Keyboard::Escape){
+                        window.close();  // Thoát trò chơi
                 }
 
                 if (!isPaused && isplaying) {
@@ -181,6 +206,17 @@ int main() {
             }
         }
 
+        if (isGameOver) {
+            if (e.key.code == Keyboard::Enter) {
+                resetGame();        // Reset lại trò chơi khi nhấn Enter
+                isGameOver = false; // Trạng thái game over bị hủy
+                isWaiting = false;  // Bắt đầu trò chơi ngay
+            }
+            else if (e.key.code == Keyboard::Escape) {
+                window.close();     // Thoát trò chơi khi nhấn ESC
+            }
+        }
+
         if (countdownActive) {
             // Cập nhật thời gian đếm ngược
             float elapsed = countdownClock.getElapsedTime().asSeconds();
@@ -194,8 +230,57 @@ int main() {
         }
 
         if (!isPaused && isplaying && !countdownActive) {
-            if (Keyboard::isKeyPressed(Keyboard::Down)) delay = 0.05;
+            // Cập nhật thời gian delta
+            float deltaTime = clock.restart().asSeconds();
+            timer += deltaTime;
 
+            // Di chuyển các khối theo thời gian delta để mượt mà hơn
+            float moveSpeed = 0.3; // Tốc độ di chuyển khối xuống (có thể điều chỉnh)
+            for (int i = 0; i < 4; i++) {
+                b[i] = a[i];
+                a[i].y += moveSpeed * deltaTime; // Di chuyển khối dựa trên deltaTime
+            }
+
+            float deltaTime = clock.restart().asSeconds();
+            timer += deltaTime;
+
+            // Kiểm tra thời gian delay
+            if (isDelayActive) {
+                if (delayClock.getElapsedTime().asSeconds() >= delayDuration) {
+                    isDelayActive = false; // Kết thúc delay
+                }
+            }
+
+            if (Keyboard::isKeyPressed(Keyboard::Down) && !isDelayActive) {
+                // Di chuyển khối xuống nhanh hơn khi nhấn Down
+                for (int i = 0; i < 4; i++) {
+                    b[i] = a[i];
+                    a[i].y += 1; // Di chuyển khối xuống nhanh hơn khi nhấn Down
+                }
+
+                // Kiểm tra va chạm
+                if (!check()) {
+                    for (int i = 0; i < 4; i++) a[i] = b[i]; // Nếu có va chạm, hủy thao tác
+
+                    // Thiết lập trạng thái delay
+                    isDelayActive = true;
+                    delayClock.restart(); // Khởi động đồng hồ delay
+                }
+            }
+
+            // Kiểm tra xem điểm có vượt qua ngưỡng hiện tại không
+            if (score >= scoreThreshold) {
+                // Giảm delay đi theo giá trị nhỏ hơn để mượt hơn
+                delay *= 0.9;  // Tốc độ tăng 10% mỗi lần đạt ngưỡng điểm
+
+                // Cập nhật ngưỡng điểm tiếp theo (thêm 300 điểm vào ngưỡng hiện tại)
+                scoreThreshold += 300;
+
+                // Đảm bảo delay không giảm quá mức giới hạn tối thiểu
+                if (delay < minDelay) {
+                    delay = minDelay;  // Giữ delay ở mức tối thiểu đã định
+                }
+            }
             // Di chuyển theo chiều ngang
             for (int i = 0; i < 4; i++) {
                 b[i] = a[i];
@@ -223,17 +308,15 @@ int main() {
             if (timer > delay) {
                 for (int i = 0; i < 4; i++) {
                     b[i] = a[i];
-                    a[i].y += 1;
+                    a[i].y += 1; // Di chuyển khối xuống
                 }
 
                 if (!check()) {
-                    for (int i = 0; i < 4; i++) {
-                        field[b[i].y][b[i].x] = pieceColors[currentPiece];
-                    }
+                    for (int i = 0; i < 4; i++) field[b[i].y][b[i].x] = pieceColors[currentPiece];
 
-                    // Sinh mảnh mới ngẫu nhiên
+                    // Sinh mảnh mới
                     currentPiece = nextPiece;
-                    nextPiece = rand() % 7; // Cập nhật mảnh tiếp theo
+                    nextPiece = rand() % 7;
 
                     int n = currentPiece;
                     for (int i = 0; i < 4; i++) {
@@ -241,12 +324,12 @@ int main() {
                         a[i].y = figures[n][i] / 2;
                     }
 
-                    // Reset lại trạng thái hold
-                    canHold = true; // Cho phép hold khi khối mới được sinh ra
+                    // Reset trạng thái hold
+                    canHold = true;
 
-                    // Kiểm tra va chạm ngay khi tạo mảnh mới
                     if (!check()) {
-                        isplaying = false;  // Kết thúc trò chơi nếu va chạm ngay lập tức
+                        isplaying = false;
+                        isGameOver = true; 
                     }
                 }
 
@@ -273,14 +356,23 @@ int main() {
         window.draw(background);
 
         if (isWaiting) {
-            // Hiển thị màn hình chờ
-            Text waitingText;
-            waitingText.setFont(font);
-            waitingText.setString("Press Enter to Start");
-            waitingText.setCharacterSize(50);
-            waitingText.setFillColor(Color::Blue);
-            waitingText.setPosition(window.getSize().x / 2 - 250, window.getSize().y / 2 - 50);
-            window.draw(waitingText);
+            window.clear(Color::Black);
+
+            Font font;
+            if (!font.loadFromFile("../data/MCR.ttf")) {
+                // Xử lý lỗi
+            }
+
+            Text title("TETRIS", font, 100);
+            title.setFillColor(Color::White);
+            title.setPosition(140, 150);
+
+            Text instruction("Press ENTER to Start", font, 35);
+            instruction.setFillColor(Color::White);
+            instruction.setPosition(125, 400);
+
+            window.draw(title);
+            window.draw(instruction);
         }
         else if (isPaused) {
             if (countdownActive) {
@@ -296,21 +388,30 @@ int main() {
                 window.draw(countdownText);
             }
             else {
-                // Hiển thị thông báo tạm dừng
-                Text pauseText;
-                pauseText.setFont(font);
-                pauseText.setString("Game Paused\nPress Enter to Resume");
-                pauseText.setCharacterSize(40);
-                pauseText.setFillColor(Color::Green);
-                pauseText.setPosition(window.getSize().x / 2 - 200, window.getSize().y / 2 - 50);
-                window.draw(pauseText);
+                window.clear(Color::Black);
+
+                Text title("PAUSE", font, 100);
+                title.setFillColor(Color::White);
+                title.setPosition(140, 150);
+
+                Text instruction("  Press ENTER to Resume\n\nPress R to Restart", font, 35);
+                instruction.setFillColor(Color::White);
+                instruction.setPosition(90, 400);
+
+                window.draw(title);
+                window.draw(instruction);
             }
         }
-        else if (!isplaying) {
-            // Hiển thị thông báo game over
+        else if (isGameOver) {
+            // Vẽ lớp phủ bán trong suốt
+            RectangleShape overlay(Vector2f(window.getSize().x, window.getSize().y));
+            overlay.setFillColor(Color(0, 0, 0, 150));  // Màu đen, độ trong suốt 150
+            window.draw(overlay);
+
+            // Hiển thị thông báo "Game Over"
             Text gameOverText;
             gameOverText.setFont(font);
-            gameOverText.setString("                 Game Over\nPress Enter to Restart");
+            gameOverText.setString("                 Game Over\nPress Enter to Restart\nPress ESC to Exit");
             gameOverText.setCharacterSize(50);
             gameOverText.setFillColor(Color::Red);
             gameOverText.setPosition(window.getSize().x / 2 - 295, window.getSize().y / 2 - 50);
