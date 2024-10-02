@@ -1,4 +1,5 @@
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 #include <ctime>
 #include <cstdlib>
 #include <string>
@@ -46,7 +47,6 @@ bool check() {
 }
 
 // Trạng thái trò chơi
-// Trạng thái trò chơi
 bool isplaying = false;
 bool isPaused = false;   // Biến trạng thái tạm dừng
 bool isWaiting = true;   // Biến trạng thái màn hình chờ
@@ -57,7 +57,13 @@ bool isHolding = false; // Biến trạng thái hold
 int holdPiece = -1; // Khối đã được hold (mặc định là -1 nghĩa là chưa hold)
 bool canHold = true;
 int currentPiece, nextPiece; // Mảnh hiện tại và tiếp theo
+bool isGameOver = false;
+bool isMusicOn = true;
 
+sf::SoundBuffer startBuffer, holdBuffer, placeBuffer, lineClearBuffer, gameOverBuffer, pauseBuffer;
+sf::Sound startSound, holdSound, placeSound, lineClearSound, gameOverSound, pauseSound;
+
+sf::Music backgroundMusic;
 
 // Hàm reset game
 void resetGame() {
@@ -88,6 +94,31 @@ void resetGame() {
 }
 
 int main() {
+    if (!startBuffer.loadFromFile("../sounds/start.ogg") ||
+        !holdBuffer.loadFromFile("../sounds/hold.ogg") ||
+        !placeBuffer.loadFromFile("../sounds/place.ogg") ||
+        !lineClearBuffer.loadFromFile("../sounds/line_clear.ogg") ||
+        !gameOverBuffer.loadFromFile("../sounds/gameover.ogg") ||
+        !pauseBuffer.loadFromFile("../sounds/pause.ogg")) {
+        return -1; // Nếu không tải được âm thanh
+    }
+
+    if (!backgroundMusic.openFromFile("../sounds/background_music.ogg")) {
+        return -1; // Thoát nếu không tải được nhạc
+    }
+    backgroundMusic.setLoop(true); // Đặt nhạc lặp lại liên tục
+    backgroundMusic.play();        // Bắt đầu phát nhạc nền
+    backgroundMusic.setVolume(30.0f);
+
+
+    // Gán buffer cho sound
+    startSound.setBuffer(startBuffer);
+    holdSound.setBuffer(holdBuffer);
+    placeSound.setBuffer(placeBuffer);
+    lineClearSound.setBuffer(lineClearBuffer);
+    gameOverSound.setBuffer(gameOverBuffer);
+    pauseSound.setBuffer(pauseBuffer);
+
     srand(static_cast<unsigned>(time(0)));
 
     RenderWindow window(VideoMode(600, 720), "Tetris");
@@ -141,6 +172,7 @@ int main() {
             if (e.type == Event::KeyPressed) {
                 if (e.key.code == Keyboard::Escape && isplaying) {
                     isPaused = !isPaused;  // Đảo ngược trạng thái tạm dừng
+                    pauseSound.play();
                     if (isPaused) {
                         countdownActive = false; // Hủy đếm ngược khi tạm dừng
                     }
@@ -149,6 +181,7 @@ int main() {
                 if (!isPaused && isWaiting && e.key.code == Keyboard::Enter) {
                     isWaiting = false;  // Thoát màn hình chờ, bắt đầu chơi
                     resetGame();        // Reset trò chơi khi bắt đầu
+                    startSound.play();
                 }
                 else if (isPaused && e.key.code == Keyboard::Enter) {
                     isPaused = false;  // Tiếp tục trò chơi khi đang ở trạng thái pause
@@ -169,6 +202,18 @@ int main() {
                     else if (e.key.code == Keyboard::Left) dx = -1;
                     else if (e.key.code == Keyboard::Right) dx = 1;
                 }
+
+                if (isPaused) {
+                    if (e.key.code == Keyboard::F) {
+                        isMusicOn = !isMusicOn; // Đảo ngược trạng thái âm nhạc (bật <-> tắt)
+                        if (isMusicOn) {
+                            backgroundMusic.play();   // Bật nhạc
+                        }
+                        else {
+                            backgroundMusic.pause();  // Tắt nhạc
+                        }
+                    }
+                }
             }
 
             if (e.key.code == Keyboard::Space && !isPaused && isplaying && canHold) {
@@ -178,11 +223,13 @@ int main() {
                     isHolding = true; // Đánh dấu đã hold
                     canHold = false; // Không cho phép hold lại cho đến lượt sau
                     nextPiece = rand() % 7; // Sinh khối mới
+                    holdSound.play();
                 }
                 else {
                     int temp = holdPiece; // Lưu khối hold hiện tại
                     holdPiece = currentPiece; // Đổi khối hold
                     currentPiece = temp; // Đổi khối hiện tại
+                    holdSound.play();  // Phát âm thanh hold
                 }
 
                 // Cập nhật mảnh mới
@@ -192,6 +239,20 @@ int main() {
                     a[i].y = figures[n][i] / 2;
                 }
                 canHold = false; // Không cho phép hold lại cho đến lượt sau
+            }
+        }
+
+        if (isplaying && !isPaused) {
+            if (isMusicOn && backgroundMusic.getStatus() != sf::Music::Playing) {
+                backgroundMusic.play(); // Chỉ phát nhạc nếu nó chưa được phát
+            }
+        }
+        else if (isPaused) {
+            backgroundMusic.pause(); // Dừng nhạc khi tạm dừng
+        }
+        else if (isWaiting) {
+            if (isMusicOn && backgroundMusic.getStatus() != sf::Music::Playing) {
+                backgroundMusic.play(); // Phát nhạc nếu ở màn hình chờ
             }
         }
 
@@ -255,6 +316,7 @@ int main() {
                     for (int i = 0; i < 4; i++) {
                         field[b[i].y][b[i].x] = pieceColors[currentPiece];
                     }
+                    placeSound.play();
 
                     // Sinh mảnh mới ngẫu nhiên
                     currentPiece = nextPiece;
@@ -272,6 +334,7 @@ int main() {
                     // Kiểm tra va chạm ngay khi tạo mảnh mới
                     if (!check()) {
                         isplaying = false;  // Kết thúc trò chơi nếu va chạm ngay lập tức
+                        gameOverSound.play();
                     }
                 }
 
@@ -288,6 +351,7 @@ int main() {
                 }
                 if (count == N) {
                     score += 100; // Tăng điểm mỗi khi xóa 1 dòng
+                    lineClearSound.play();
                 }
                 if (count < N) k--;
             }
@@ -336,12 +400,26 @@ int main() {
                 title.setFillColor(Color::White);
                 title.setPosition(170, 150);
 
-                Text instruction("  Press ENTER to Resume\n\n  Press R to Restart", font, 35);
+                Text instruction("  Press ENTER to Resume\n\n  Press R to Restart\n\n  Press F to Toggle Music", font, 35);
                 instruction.setFillColor(Color::White);
                 instruction.setPosition(90, 400);
 
                 window.draw(title);
                 window.draw(instruction);
+
+                // Hiển thị trạng thái âm nhạc (On/Off)
+                Text musicStatus;
+                if (isMusicOn) {
+                    musicStatus.setString("Music: ON");
+                }
+                else {
+                    musicStatus.setString("Music: OFF");
+                }
+                musicStatus.setFont(font);
+                musicStatus.setCharacterSize(35);
+                musicStatus.setFillColor(Color::White);
+                musicStatus.setPosition(100, 600);
+                window.draw(musicStatus);
             }
         }
         else if (!isplaying) {
@@ -378,10 +456,10 @@ int main() {
             // Hiển thị điểm ở góc dưới bên trái
             Text scoreText;
             scoreText.setFont(font);
-            scoreText.setString("Score: " + std::to_string(score));
-            scoreText.setCharacterSize(24);
+            scoreText.setString("Score: \n" + std::to_string(score));
+            scoreText.setCharacterSize(35);
             scoreText.setFillColor(Color::Black);
-            scoreText.setPosition(10, window.getSize().y - 50);
+            scoreText.setPosition(10, window.getSize().y - 150);
             window.draw(scoreText);
 
             if (holdPiece != -1) {
